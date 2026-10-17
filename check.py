@@ -1,11 +1,15 @@
 
-from database import check_tasks
+from database import (
+    check_tasks,
+    get_pending_notifications,
+    mark_notification_sent,
+)
 from parser import get_tasks
-from telegram_bot import format_notification, send_message
+from telegram_bot import send_message
 
 
 def main():
-    print("Проверяем задания Практикума...")
+    print("Проверяем Практикум...")
 
     tasks = get_tasks()
 
@@ -18,10 +22,14 @@ def main():
     print(f"Закрытых: {sum(task['locked'] for task in tasks)}")
     print(f"Новых открытий: {len(opened)}")
 
-    for task in opened:
-        message = format_notification(task)
+    pending = get_pending_notifications()
+
+    for task_id, message in pending:
         send_message(message)
+        mark_notification_sent(task_id)
         print(f"Отправлено: {message}")
+
+    print(f"Ожидающих уведомлений: {len(get_pending_notifications())}")
 
 
 if __name__ == "__main__":
