@@ -1,7 +1,26 @@
+
+# Секреты
 .env
+.env.*
+
+# Python
 .venv/
 __pycache__/
-*.pyc
-.ruff_cache/
+*.py[cod]
 .pytest_cache/
+.ruff_cache/
+
+# Локальные данные
 data/
+
+# Логи
+logs/
+*.log
+
+# macOS
+.DS_Store
+
+# Сборка
+dist/
+build/
+*.egg-info/
