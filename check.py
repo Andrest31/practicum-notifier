@@ -14,6 +14,7 @@ from health import (
     record_failure,
     reset_health,
 )
+from lock import AlreadyRunningError, single_instance
 from parser import get_tasks
 from telegram_bot import send_message
 
@@ -21,7 +22,7 @@ MIN_TASK_RATIO = 0.8
 
 
 def validate_task_count(tasks):
-    """Защита от резкого уменьшения количества заданий."""
+    """Защита от неполной загрузки заданий."""
     with get_connection() as connection:
         previous_count = connection.execute(
             "SELECT COUNT(*) FROM tasks"
@@ -30,28 +31,37 @@ def validate_task_count(tasks):
     current_count = len(tasks)
 
     if previous_count == 0:
+        print(
+            "Первый запуск: сравнение количества пропущено.",
+            flush=True,
+        )
         return
 
     print(
         f"Сравнение заданий: "
-        f"было {previous_count}, получено {current_count}"
+        f"было {previous_count}, "
+        f"получено {current_count}",
+        flush=True,
     )
 
     if current_count / previous_count < MIN_TASK_RATIO:
         raise RuntimeError(
-            f"Получено только {current_count} "
-            f"из {previous_count} заданий."
+            "Подозрительно мало заданий: "
+            f"{current_count} из {previous_count}. "
+            "SQLite не обновлена."
         )
 
 
 def check_practicum():
-    """Проверяет сайт и обновляет базу."""
+    """Получает задания и обновляет их статусы."""
     print("Проверяем Практикум...", flush=True)
 
     tasks = get_tasks()
 
     if not tasks:
-        raise RuntimeError("Список заданий пуст.")
+        raise RuntimeError(
+            "Задания не получены. Проверка остановлена."
+        )
 
     validate_task_count(tasks)
 
@@ -66,14 +76,16 @@ def check_practicum():
 
 
 def send_pending():
-    """Отправляет ожидающие уведомления."""
+    """Отправляет накопленные уведомления."""
     for task_id, message in get_pending_notifications():
         send_message(message)
         mark_notification_sent(task_id)
-        print(f"Отправлено:\n{message}")
+
+        print(f"Отправлено:\n{message}", flush=True)
 
 
 def main():
+    """Основной цикл одной проверки."""
     print(
         f"\n=====\n"
         f"{datetime.now():%d.%m %H:%M}\n"
@@ -88,7 +100,8 @@ def main():
         failures, alerted = record_failure()
 
         print(
-            f"Ошибка проверки ({failures} подряд): {error}",
+            f"Ошибка проверки "
+            f"({failures} подряд): {error}",
             flush=True,
         )
 
@@ -101,12 +114,14 @@ def main():
 
             try:
                 send_message(message)
+
             except Exception as telegram_error:
                 print(
-                    f"Не удалось отправить предупреждение: "
+                    "Не удалось отправить предупреждение: "
                     f"{telegram_error}",
                     flush=True,
                 )
+
             else:
                 mark_alerted()
 
@@ -121,25 +136,38 @@ def main():
                     "🟢 Практикум снова доступен!\n"
                     "Проверка заданий восстановлена."
                 )
+
             except Exception as error:
                 print(
-                    f"Не удалось отправить сообщение "
+                    "Не удалось отправить сообщение "
                     f"о восстановлении: {error}",
                     flush=True,
                 )
+
             else:
                 reset_health()
+
         elif failures:
             reset_health()
 
-    # Отправляем уведомления об открытии заданий
+    # Отправляем уведомления о новых заданиях
     send_pending()
 
     print(
-        f"Ожидающих уведомлений: "
-        f"{len(get_pending_notifications())}"
+        "Ожидающих уведомлений: "
+        f"{len(get_pending_notifications())}",
+        flush=True,
     )
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        with single_instance():
+            main()
+
+    except AlreadyRunningError:
+        print(
+            "⏳ Предыдущая проверка ещё выполняется. "
+            "Пропускаем запуск.",
+            flush=True,
+        )
