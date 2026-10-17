@@ -1,6 +1,7 @@
 
 from database import check_tasks
 from parser import get_tasks
+from telegram_bot import format_notification, send_message
 
 
 def main():
@@ -9,9 +10,7 @@ def main():
     tasks = get_tasks()
 
     if not tasks:
-        raise RuntimeError(
-            "Не удалось получить задания. База не обновлена."
-        )
+        raise RuntimeError("Задания не получены. Проверка остановлена.")
 
     opened = check_tasks(tasks)
 
@@ -20,10 +19,9 @@ def main():
     print(f"Новых открытий: {len(opened)}")
 
     for task in opened:
-        print(
-            f"\n🟢 {task['discipline']}\n"
-            f"{task['module']}. {task['type']} — открылся!"
-        )
+        message = format_notification(task)
+        send_message(message)
+        print(f"Отправлено: {message}")
 
 
 if __name__ == "__main__":
