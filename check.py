@@ -3,11 +3,43 @@ from datetime import datetime
 
 from database import (
     check_tasks,
+    get_connection,
     get_pending_notifications,
     mark_notification_sent,
 )
 from parser import get_tasks
 from telegram_bot import send_message
+
+MIN_TASK_RATIO = 0.8
+
+
+def validate_task_count(tasks):
+    """Проверяет резкое уменьшение числа заданий."""
+    with get_connection() as connection:
+        previous_count = connection.execute(
+            "SELECT COUNT(*) FROM tasks"
+        ).fetchone()[0]
+
+    current_count = len(tasks)
+
+    if previous_count == 0:
+        print("Первый запуск: сравнение количества пропущено.")
+        return
+
+    ratio = current_count / previous_count
+
+    print(
+        f"Сравнение заданий: "
+        f"было {previous_count}, "
+        f"получено {current_count}"
+    )
+
+    if ratio < MIN_TASK_RATIO:
+        raise RuntimeError(
+            "Подозрительно мало заданий: "
+            f"{current_count} из {previous_count}. "
+            "SQLite не обновлена."
+        )
 
 
 def main():
@@ -26,6 +58,8 @@ def main():
         raise RuntimeError(
             "Задания не получены. Проверка остановлена."
         )
+
+    validate_task_count(tasks)
 
     opened = check_tasks(tasks)
 

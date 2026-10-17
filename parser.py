@@ -52,6 +52,53 @@ def select_first_semester(page):
     print("Клик по первому семестру выполнен")
 
 
+def validate_tasks(tasks):
+    """Проверяет целостность полученных заданий."""
+    if not tasks:
+        raise RuntimeError(
+            "Практикум не вернул ни одного задания."
+        )
+
+    required_fields = (
+        "id",
+        "discipline",
+        "module",
+        "type",
+        "status",
+    )
+
+    seen_ids = set()
+
+    for index, task in enumerate(tasks, start=1):
+        for field in required_fields:
+            value = task.get(field)
+
+            if not isinstance(value, str) or not value.strip():
+                raise RuntimeError(
+                    f"Задание №{index}: "
+                    f"отсутствует поле {field!r}."
+                )
+
+        if not isinstance(task.get("locked"), bool):
+            raise RuntimeError(
+                f"Задание №{index}: некорректный locked."
+            )
+
+        task_id = task["id"]
+
+        if task_id in seen_ids:
+            raise RuntimeError(
+                f"Обнаружен повторяющийся ID: {task_id}"
+            )
+
+        seen_ids.add(task_id)
+
+    print(
+        f"Проверка структуры пройдена: "
+        f"{len(tasks)} уникальных заданий."
+    )
+
+
 def get_tasks():
     """Получает задания первого семестра из Практикума."""
     with sync_playwright() as playwright:
@@ -61,7 +108,11 @@ def get_tasks():
         )
 
         try:
-            page = browser.pages[0] if browser.pages else browser.new_page()
+            page = (
+                browser.pages[0]
+                if browser.pages
+                else browser.new_page()
+            )
 
             page.goto(
                 URL,
@@ -76,6 +127,29 @@ def get_tasks():
                 state="attached",
                 timeout=30000,
             )
+
+            # Даём странице время дорисовать карточки.
+            # Проверяем, что количество перестало меняться.
+            previous_count = -1
+            stable_checks = 0
+
+            for _ in range(20):
+                count = page.locator(".control-form").count()
+
+                if count > 0 and count == previous_count:
+                    stable_checks += 1
+                else:
+                    stable_checks = 0
+
+                if stable_checks >= 3:
+                    break
+
+                previous_count = count
+                page.wait_for_timeout(500)
+            else:
+                raise RuntimeError(
+                    "Количество заданий не стабилизировалось."
+                )
 
             tasks = page.locator(".control-form").evaluate_all(
                 """elements => elements.map(el => {
@@ -120,21 +194,17 @@ def get_tasks():
                 })"""
             )
 
-            result = []
-
             for task in tasks:
-                if not task["id"] or not task["type"]:
-                    continue
-
                 task["discipline"] = normalize_discipline(
                     task["discipline"]
                 )
 
-                result.append(task)
+            # Ничего не отбрасываем молча:
+            # некорректные карточки вызывают ошибку.
+            validate_tasks(tasks)
 
-            print(f"Заданий получено: {len(result)}")
-
-            return result
+            print(f"Заданий получено: {len(tasks)}")
+            return tasks
 
         finally:
             browser.close()
