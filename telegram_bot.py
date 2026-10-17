@@ -19,6 +19,7 @@ def send_message(text: str) -> None:
         json={
             "chat_id": chat_id,
             "text": text,
+            "parse_mode": "HTML",
         },
         timeout=15,
     )
