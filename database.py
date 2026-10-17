@@ -48,7 +48,8 @@ def check_tasks(tasks):
 
                 message = (
                     f"🟢 {task['discipline']}\n"
-                    f"{task['module']} — открылся!"
+                    f"{task['module']}\n"
+                    f"{task['type']} — открылся!"
                 )
 
                 connection.execute(
