@@ -4,11 +4,18 @@ from database import (
     get_pending_notifications,
     mark_notification_sent,
 )
+from datetime import datetime
 from parser import get_tasks
 from telegram_bot import send_message
 
 
 def main():
+    print(
+    f"\n=====\n"
+    f"{datetime.now():%d.%m %H:%M}\n"
+    f"=====",
+    flush=True,
+)
     print("Проверяем Практикум...")
 
     tasks = get_tasks()
