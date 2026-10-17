@@ -10,7 +10,12 @@ URL = "https://practicum.yandex.ru/profile/higher-data-analytics/"
 
 def normalize_discipline(name: str) -> str:
     """Очищает и сокращает название дисциплины."""
-    name = re.sub(r"^\s*\[(?:МИФИ|Практикум)\]\s*", "", name, flags=re.I)
+    name = re.sub(
+        r"^\s*\[(?:МИФИ|Практикум)\]\s*",
+        "",
+        name,
+        flags=re.I,
+    )
     name = " ".join(name.split())
 
     lower_name = name.lower()
@@ -27,7 +32,28 @@ def normalize_discipline(name: str) -> str:
     return name
 
 
+def select_first_semester(page):
+    """Находит и выбирает первый семестр."""
+    print("Ищем первый семестр...")
+
+    semester = page.get_by_text(
+        re.compile(r"1\s*семестр", re.I),
+        exact=False,
+    ).last
+
+    semester.wait_for(
+        state="visible",
+        timeout=30000,
+    )
+
+    semester.scroll_into_view_if_needed()
+    semester.click(timeout=15000)
+
+    print("Клик по первому семестру выполнен")
+
+
 def get_tasks():
+    """Получает задания первого семестра из Практикума."""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
@@ -36,9 +62,20 @@ def get_tasks():
 
         try:
             page = browser.pages[0] if browser.pages else browser.new_page()
-            page.goto(URL, wait_until="domcontentloaded")
 
-            page.locator(".control-form").first.wait_for(timeout=20000)
+            page.goto(
+                URL,
+                wait_until="domcontentloaded",
+                timeout=30000,
+            )
+
+            select_first_semester(page)
+
+            # Ждём появления карточек заданий
+            page.locator(".control-form").first.wait_for(
+                state="attached",
+                timeout=30000,
+            )
 
             tasks = page.locator(".control-form").evaluate_all(
                 """elements => elements.map(el => {
@@ -50,7 +87,10 @@ def get_tasks():
                             ?.textContent.trim() || '';
 
                     const moduleTitle = module
-                        ? getText(module, 'h1, h2, h3, h4, h5, h6')
+                        ? getText(
+                            module,
+                            'h1, h2, h3, h4, h5, h6'
+                        )
                         : '';
 
                     const disciplineTitle = discipline
@@ -92,6 +132,8 @@ def get_tasks():
 
                 result.append(task)
 
+            print(f"Заданий получено: {len(result)}")
+
             return result
 
         finally:
@@ -113,4 +155,7 @@ if __name__ == "__main__":
             f"{task['status']}"
         )
 
-    print(f"\nЗакрытых: {sum(t['locked'] for t in tasks)}")
+    print(
+        f"\nЗакрытых: "
+        f"{sum(task['locked'] for task in tasks)}"
+    )
