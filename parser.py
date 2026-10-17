@@ -57,7 +57,7 @@ def get_tasks():
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch_persistent_context(
             user_data_dir=str(PROFILE_DIR),
-            headless=False,
+            headless=True,
         )
 
         try:
